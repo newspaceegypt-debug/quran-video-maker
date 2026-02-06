@@ -3007,6 +3007,10 @@
             if (progressBar) progressBar.style.width = "10%";
 
             try {
+                // الحصول على أبعاد Canvas
+                const canvasWidth = canvas.width;
+                const canvasHeight = canvas.height;
+
                 // تحضير البيانات للإرسال
                 const exportData = {
                     clips: clips.map(c => ({
@@ -3018,9 +3022,9 @@
                         audio: c.audio
                     })),
                     settings: {
-                        mode: W > H ? 'landscape' : 'portrait',
-                        width: W,
-                        height: H,
+                        mode: canvasWidth > canvasHeight ? 'landscape' : 'portrait',
+                        width: canvasWidth,
+                        height: canvasHeight,
                         showArabicText: document.getElementById('showArabicText').checked,
                         showTranslation: document.getElementById('showTranslation').checked,
                         showMeaning: document.getElementById('showMeaning').checked,
