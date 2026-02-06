@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 
 <head>
@@ -6,6 +6,7 @@
     <title>ستوديو القرآن الاحترافي - الإصدار النهائي المكتمل</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/RecordRTC/5.6.2/RecordRTC.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=Tajawal:wght@500;800&display=swap"
         rel="stylesheet">
     <style>
@@ -790,10 +791,26 @@
             <button id="exportBtn" onclick="exportVideo()"
                 class="w-full bg-red-600 py-4 rounded-xl font-black text-lg shadow-lg">🚀 تصدير الفيديو (جودة
                 HD)</button>
+            <button id="ffmpegExportBtn" onclick="exportWithFFmpeg()"
+                class="w-full bg-purple-600 py-4 rounded-xl font-black text-lg shadow-lg mt-2">⚡ تصدير سريع FFmpeg (أسرع
+                3x)</button>
             <button id="previewBtn" onclick="previewVideo()"
                 class="w-full bg-blue-600 py-3 rounded-xl font-bold text-base shadow-lg mt-2">👁️ معاينة
                 الفيديو الكامل</button>
-            <p class="text-[8px] text-center text-zinc-500 mt-2">المعاينة: تشغيل الفيديو بدون تسجيل</p>
+            <p class="text-[8px] text-center text-zinc-500 mt-2">المعاينة: تشغيل الفيديو بدون تسجيل | FFmpeg: تصدير سريع
+                بدون تسجيل</p>
+
+            <!-- شريط تقدم FFmpeg -->
+            <div id="ffmpegProgress" style="display:none;"
+                class="w-full mt-4 p-4 bg-zinc-900 rounded-xl border border-purple-500">
+                <p id="ffmpegStatus" class="text-center text-white font-bold mb-2">جاري التحضير...</p>
+                <div class="w-full bg-zinc-800 rounded-full h-4 overflow-hidden">
+                    <div id="ffmpegProgressBar"
+                        class="bg-gradient-to-r from-purple-600 to-pink-600 h-4 transition-all duration-300"
+                        style="width: 0%"></div>
+                </div>
+                <p id="ffmpegDetails" class="text-center text-zinc-400 text-xs mt-2">0%</p>
+            </div>
         </div>
 
         <div class="flex flex-col items-center justify-center p-6 bg-[#030303]">
@@ -2405,6 +2422,254 @@
                 isEndPhase = false;
                 isOutroPhase = false;
             });
+        }
+
+        // ⚡ FFmpeg Export - تصدير سريع بدون تسجيل
+        let ffmpegInstance = null;
+        let ffmpegLoaded = false;
+
+        async function loadFFmpeg() {
+            if (ffmpegLoaded && ffmpegInstance) {
+                return ffmpegInstance;
+            }
+
+            try {
+                // استخدام FFmpeg 0.11.6 API
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                ffmpegInstance = createFFmpeg({
+                    log: true,
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                });
+
+                updateFFmpegProgress('loading', 10, '⏳ جاري تحميل FFmpeg...');
+                await ffmpegInstance.load();
+                ffmpegLoaded = true;
+                updateFFmpegProgress('loading', 30, '✅ تم تحميل FFmpeg بنجاح');
+
+                // تخزين fetchFile للاستخدام لاحقاً
+                ffmpegInstance.fetchFile = fetchFile;
+
+                return ffmpegInstance;
+            } catch (error) {
+                console.error('خطأ في تحميل FFmpeg:', error);
+                throw new Error('فشل تحميل FFmpeg');
+            }
+        }
+
+        function updateFFmpegProgress(status, percent, message) {
+            const btn = document.getElementById('ffmpegExportBtn');
+            const progressDiv = document.getElementById('ffmpegProgress');
+            const statusText = document.getElementById('ffmpegStatus');
+            const progressBar = document.getElementById('ffmpegProgressBar');
+            const detailsText = document.getElementById('ffmpegDetails');
+
+            if (btn) {
+                btn.innerText = `${message} (${percent}%)`;
+            }
+
+            if (progressDiv) {
+                progressDiv.style.display = 'block';
+            }
+
+            if (statusText) {
+                statusText.innerText = message;
+            }
+
+            if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+            }
+
+            if (detailsText) {
+                detailsText.innerText = `${percent}%`;
+            }
+
+            console.log(`[FFmpeg] ${message} - ${percent}%`);
+        }
+
+        async function exportWithFFmpeg() {
+            if (clips.length === 0) {
+                alert("⚠️ يجب جلب الآيات أولاً!");
+                return;
+            }
+
+            const btn = document.getElementById('ffmpegExportBtn');
+            btn.disabled = true;
+            btn.innerText = "⚡ جاري التحضير...";
+
+            try {
+                // تحميل FFmpeg
+                updateFFmpegProgress('loading', 5, '⏳ جاري تحميل FFmpeg');
+                const ffmpeg = await loadFFmpeg();
+
+                // إعادة تعيين المتغيرات
+                resetPlayback();
+
+                // حساب إجمالي المدة
+                let totalDuration = 0;
+                if (hasFullAudio && clips.some(c => c.syncTime !== undefined)) {
+                    const lastClipIndex = clips.length - 1;
+                    const lastAyahStartTime = clips[lastClipIndex].syncTime;
+                    let estimatedDuration = 5;
+
+                    if (lastClipIndex > 0 && clips[lastClipIndex - 1].syncTime !== undefined) {
+                        let totalDur = 0;
+                        let count = 0;
+                        for (let i = 1; i < clips.length; i++) {
+                            if (clips[i].syncTime !== undefined && clips[i - 1].syncTime !== undefined) {
+                                totalDur += clips[i].syncTime - clips[i - 1].syncTime;
+                                count++;
+                            }
+                        }
+                        if (count > 0) {
+                            estimatedDuration = totalDur / count;
+                        }
+                    }
+                    totalDuration = lastAyahStartTime + estimatedDuration;
+                } else {
+                    totalDuration = clips.length * 5; // تقدير 5 ثواني لكل آية
+                }
+
+                const fps = 30;
+                const totalFrames = Math.ceil(totalDuration * fps);
+
+                updateFFmpegProgress('rendering', 35, `⏳ جاري رسم ${totalFrames} إطار`);
+
+                // رسم جميع الإطارات
+                const frames = [];
+                for (let frameNum = 0; frameNum < totalFrames; frameNum++) {
+                    const currentTime = frameNum / fps;
+
+                    // تحديد الآية الحالية بناءً على الوقت
+                    if (hasFullAudio && clips.some(c => c.syncTime !== undefined)) {
+                        for (let i = clips.length - 1; i >= 0; i--) {
+                            if (clips[i].syncTime !== undefined && currentTime >= clips[i].syncTime) {
+                                currentIdx = i;
+                                break;
+                            }
+                        }
+                    } else {
+                        currentIdx = Math.floor(currentTime / 5) % clips.length;
+                    }
+
+                    fade = 1; // إظهار كامل
+
+                    // رسم الإطار
+                    draw();
+
+                    // تحويل Canvas إلى Blob
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+                    frames.push(blob);
+
+                    // تحديث التقدم
+                    if (frameNum % 30 === 0) {
+                        const progress = 35 + Math.floor((frameNum / totalFrames) * 30);
+                        updateFFmpegProgress('rendering', progress, `⏳ رسم الإطارات: ${frameNum}/${totalFrames}`);
+                    }
+                }
+
+                updateFFmpegProgress('processing', 65, '⏳ جاري كتابة الإطارات إلى FFmpeg');
+
+                // كتابة الإطارات إلى FFmpeg
+                for (let i = 0; i < frames.length; i++) {
+                    const frameData = await ffmpeg.fetchFile(frames[i]);
+                    ffmpeg.FS('writeFile', `frame${String(i).padStart(6, '0')}.jpg`, frameData);
+
+                    if (i % 30 === 0) {
+                        const progress = 65 + Math.floor((i / frames.length) * 10);
+                        updateFFmpegProgress('processing', progress, `⏳ كتابة الإطارات: ${i}/${frames.length}`);
+                    }
+                }
+
+                updateFFmpegProgress('processing', 75, '⏳ جاري معالجة الصوت');
+
+                // معالجة الصوت
+                let audioFileName = null;
+                if (hasFullAudio && player.src) {
+                    try {
+                        const audioBlob = await fetch(player.src).then(r => r.blob());
+                        const audioData = await ffmpeg.fetchFile(audioBlob);
+                        audioFileName = 'audio.mp3';
+                        ffmpeg.FS('writeFile', audioFileName, audioData);
+                    } catch (error) {
+                        console.warn('تعذر تحميل الصوت:', error);
+                    }
+                }
+
+                updateFFmpegProgress('encoding', 80, '⏳ جاري دمج الفيديو (قد يستغرق دقائق)');
+
+                // دمج الإطارات والصوت
+                const outputFileName = 'output.mp4';
+                const ffmpegArgs = [
+                    '-framerate', String(fps),
+                    '-i', 'frame%06d.jpg',
+                ];
+
+                if (audioFileName) {
+                    ffmpegArgs.push('-i', audioFileName);
+                    ffmpegArgs.push('-c:a', 'aac');
+                    ffmpegArgs.push('-b:a', '192k');
+                    ffmpegArgs.push('-shortest');
+                }
+
+                ffmpegArgs.push(
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                    outputFileName
+                );
+
+                await ffmpeg.run(...ffmpegArgs);
+
+                updateFFmpegProgress('downloading', 95, '⏳ جاري تحميل الفيديو');
+
+                // تحميل الفيديو
+                const data = ffmpeg.FS('readFile', outputFileName);
+                const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+                const url = URL.createObjectURL(videoBlob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'Quran_FFmpeg_Export.mp4';
+                a.click();
+
+                updateFFmpegProgress('done', 100, '✅ تم التصدير بنجاح!');
+
+                // تنظيف الملفات
+                setTimeout(() => {
+                    try {
+                        for (let i = 0; i < frames.length; i++) {
+                            ffmpeg.FS('unlink', `frame${String(i).padStart(6, '0')}.jpg`);
+                        }
+                        if (audioFileName) {
+                            ffmpeg.FS('unlink', audioFileName);
+                        }
+                        ffmpeg.FS('unlink', outputFileName);
+                    } catch (e) {
+                        console.warn('تعذر تنظيف الملفات:', e);
+                    }
+                }, 1000);
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerText = "⚡ تصدير سريع FFmpeg (أسرع 3x)";
+                    const progressDiv = document.getElementById('ffmpegProgress');
+                    if (progressDiv) {
+                        progressDiv.style.display = 'none';
+                    }
+                }, 3000);
+
+            } catch (error) {
+                console.error('خطأ في التصدير:', error);
+                alert(`❌ حدث خطأ في التصدير:\n${error.message}\n\nتأكد من:\n1. رفع الملف على خادم (GitHub Pages)\n2. استخدام متصفح حديث (Chrome/Edge)`);
+                btn.disabled = false;
+                btn.innerText = "⚡ تصدير سريع FFmpeg (أسرع 3x)";
+                const progressDiv = document.getElementById('ffmpegProgress');
+                if (progressDiv) {
+                    progressDiv.style.display = 'none';
+                }
+            }
         }
 
         // 🤖 التصدير الذكي - مزامنة تلقائية بالـ AI
