@@ -1,0 +1,14 @@
+{
+    "functions": {
+        "api/export.js": {
+            "maxDuration": 300,
+            "memory": 3008
+        }
+    },
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "/api/$1"
+        }
+    ]
+}
