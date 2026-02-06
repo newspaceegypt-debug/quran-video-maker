@@ -2493,8 +2493,10 @@
                 return;
             }
 
-            if (!hasFullAudio) {
-                alert("⚠️ يجب رفع صوت التلاوة الكامل أولاً!");
+            // التحقق من وجود صوت (سواء مرفوع أو مجلوب)
+            const hasAudio = hasFullAudio || (clips.length > 0 && clips[0].audio);
+            if (!hasAudio) {
+                alert("⚠️ يجب جلب الآيات مع الصوت أولاً!");
                 return;
             }
 
