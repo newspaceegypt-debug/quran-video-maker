@@ -789,25 +789,27 @@
                     الفيديو/الصورة</button>
             </div>
 
-            <button id="exportBtn" onclick="exportVideo()"
-                class="w-full bg-red-600 py-4 rounded-xl font-black text-lg shadow-lg">🚀 تصدير الفيديو (جودة
-                HD)</button>
-            <button id="ffmpegExportBtn" onclick="exportWithFFmpeg()"
-                class="w-full bg-purple-600 py-4 rounded-xl font-black text-lg shadow-lg mt-2">⚡ تصدير FFmpeg
-                (فوري)</button>
-            <button id="fastExportBtn" onclick="fastExport()"
-                class="w-full bg-blue-600 py-3 rounded-xl font-bold text-base shadow-lg mt-2">⚡ تصدير سريع 3x</button>
+            <button id="serverExportBtn" onclick="exportWithServer()"
+                class="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-xl font-black text-lg shadow-lg">
+                ⚡ تصدير احترافي (سريع)
+            </button>
+            <button id="localExportBtn" onclick="exportVideo()"
+                class="w-full bg-red-600 py-3 rounded-xl font-bold text-base shadow-lg mt-2">
+                🚀 تصدير محلي (بطيء)
+            </button>
             <button id="previewBtn" onclick="previewVideo()"
-                class="w-full bg-green-600 py-3 rounded-xl font-bold text-base shadow-lg mt-2">👁️ معاينة
-                الفيديو الكامل</button>
-            <p class="text-[8px] text-center text-zinc-500 mt-2">FFmpeg: تصدير فوري | 3x: تسجيل بسرعة 3 أضعاف</p>
+                class="w-full bg-blue-600 py-3 rounded-xl font-bold text-base shadow-lg mt-2">
+                👁️ معاينة
+            </button>
+            <p class="text-[8px] text-center text-zinc-500 mt-2">التصدير الاحترافي: سريع عبر السيرفر | المحلي: بطيء لكن
+                بدون إنترنت</p>
 
-            <!-- شريط تقدم FFmpeg -->
-            <div id="ffmpegProgress" style="display:none;"
+            <!-- شريط تقدم التصدير -->
+            <div id="exportProgress" style="display:none;"
                 class="w-full mt-4 p-4 bg-zinc-900 rounded-xl border border-purple-500">
-                <p id="ffmpegStatus" class="text-center text-white font-bold mb-2">جاري التحضير...</p>
+                <p id="exportStatus" class="text-center text-white font-bold mb-2">جاري التحضير...</p>
                 <div class="w-full bg-zinc-800 rounded-full h-4 overflow-hidden">
-                    <div id="ffmpegProgressBar"
+                    <div id="exportProgressBar"
                         class="bg-gradient-to-r from-purple-600 to-pink-600 h-4 transition-all duration-300"
                         style="width: 0%"></div>
                 </div>
@@ -2839,9 +2841,10 @@
                 return;
             }
 
-            // التحقق من وجود صوت كامل ومزامنة
-            if (!hasFullAudio) {
-                alert("⚠️ يجب رفع صوت التلاوة الكامل أولاً!");
+            // التحقق من وجود صوت (مرفوع أو مجلوب)
+            const hasAudio = hasFullAudio || (clips.length > 0 && clips[0].audio);
+            if (!hasAudio) {
+                alert("⚠️ يجب جلب الآيات مع الصوت أولاً!");
                 return;
             }
 
@@ -2975,6 +2978,112 @@
                 btn.innerText = "⚡ تصدير سريع (بدون انتظار)";
                 player.playbackRate = 1.0;
                 bgMusic.playbackRate = 1.0;
+            }
+        }
+
+        // ⚡ التصدير عبر السيرفر - الحل الاحترافي
+        async function exportWithServer() {
+            if (clips.length === 0) {
+                alert("⚠️ يجب جلب الآيات أولاً!");
+                return;
+            }
+
+            const hasSync = clips.some(c => c.syncTime !== undefined);
+            if (!hasSync) {
+                alert("⚠️ يجب تحديد نقاط المزامنة أولاً!\n\nاستخدم 'تصدير ذكي' للمزامنة التلقائية");
+                return;
+            }
+
+            const btn = document.getElementById('serverExportBtn');
+            const progressDiv = document.getElementById('exportProgress');
+            const statusText = document.getElementById('exportStatus');
+            const progressBar = document.getElementById('exportProgressBar');
+
+            btn.disabled = true;
+            btn.innerText = "⏳ جاري الإرسال للسيرفر...";
+
+            if (progressDiv) progressDiv.style.display = 'block';
+            if (statusText) statusText.innerText = "جاري تحضير البيانات...";
+            if (progressBar) progressBar.style.width = "10%";
+
+            try {
+                // تحضير البيانات للإرسال
+                const exportData = {
+                    clips: clips.map(c => ({
+                        ar: c.ar,
+                        translation: c.translation,
+                        meaning: c.meaning,
+                        number: c.number,
+                        syncTime: c.syncTime,
+                        audio: c.audio
+                    })),
+                    settings: {
+                        mode: currentMode,
+                        width: W,
+                        height: H,
+                        showArabicText: document.getElementById('showArabicText').checked,
+                        showTranslation: document.getElementById('showTranslation').checked,
+                        showMeaning: document.getElementById('showMeaning').checked,
+                        showAyahNumber: document.getElementById('showAyahNumber').checked,
+                        showReciterName: document.getElementById('showReciterName').checked,
+                        showDate: document.getElementById('showDate').checked,
+                        customTitle: document.getElementById('customTitle').value,
+                        channelName: document.getElementById('channelName').value,
+                        reciterName: currentReciterName
+                    }
+                };
+
+                if (statusText) statusText.innerText = "جاري إرسال البيانات للسيرفر...";
+                if (progressBar) progressBar.style.width = "30%";
+
+                // إرسال البيانات للسيرفر
+                const SERVER_URL = 'https://quran-video-maker-production.up.railway.app/api/export';
+
+                const response = await fetch(SERVER_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(exportData)
+                });
+
+                if (!response.ok) {
+                    throw new Error('فشل الاتصال بالسيرفر');
+                }
+
+                if (statusText) statusText.innerText = "السيرفر يعالج الفيديو...";
+                if (progressBar) progressBar.style.width = "60%";
+
+                // استقبال الفيديو
+                const blob = await response.blob();
+
+                if (statusText) statusText.innerText = "جاري تحميل الفيديو...";
+                if (progressBar) progressBar.style.width = "90%";
+
+                // تحميل الفيديو
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'Quran_Professional_Export.mp4';
+                a.click();
+
+                if (statusText) statusText.innerText = "✅ تم التصدير بنجاح!";
+                if (progressBar) progressBar.style.width = "100%";
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerText = "⚡ تصدير احترافي (سريع)";
+                    if (progressDiv) progressDiv.style.display = 'none';
+                }, 2000);
+
+                alert("✅ تم تصدير الفيديو بنجاح!");
+
+            } catch (error) {
+                console.error('خطأ في التصدير:', error);
+                alert(`❌ حدث خطأ:\n${error.message}\n\nتأكد من:\n1. الاتصال بالإنترنت\n2. السيرفر يعمل`);
+                btn.disabled = false;
+                btn.innerText = "⚡ تصدير احترافي (سريع)";
+                if (progressDiv) progressDiv.style.display = 'none';
             }
         }
 
