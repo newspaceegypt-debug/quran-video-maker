@@ -3018,7 +3018,7 @@
                         audio: c.audio
                     })),
                     settings: {
-                        mode: currentMode,
+                        mode: W > H ? 'landscape' : 'portrait',
                         width: W,
                         height: H,
                         showArabicText: document.getElementById('showArabicText').checked,
