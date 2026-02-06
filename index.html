@@ -6,7 +6,8 @@
     <title>ستوديو القرآن الاحترافي - الإصدار النهائي المكتمل</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/RecordRTC/5.6.2/RecordRTC.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=Tajawal:wght@500;800&display=swap"
         rel="stylesheet">
     <style>
@@ -2434,25 +2435,27 @@
             }
 
             try {
-                // استخدام FFmpeg 0.11.6 API
-                const { createFFmpeg, fetchFile } = FFmpeg;
-                ffmpegInstance = createFFmpeg({
-                    log: true,
-                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-                });
+                // استخدام FFmpeg 0.12.x API الجديد
+                const { FFmpeg } = FFmpegWASM;
+                const { toBlobURL } = FFmpegUtil;
+
+                ffmpegInstance = new FFmpeg();
 
                 updateFFmpegProgress('loading', 10, '⏳ جاري تحميل FFmpeg...');
-                await ffmpegInstance.load();
+
+                const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+                await ffmpegInstance.load({
+                    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+                });
+
                 ffmpegLoaded = true;
                 updateFFmpegProgress('loading', 30, '✅ تم تحميل FFmpeg بنجاح');
-
-                // تخزين fetchFile للاستخدام لاحقاً
-                ffmpegInstance.fetchFile = fetchFile;
 
                 return ffmpegInstance;
             } catch (error) {
                 console.error('خطأ في تحميل FFmpeg:', error);
-                throw new Error('فشل تحميل FFmpeg');
+                throw new Error('فشل تحميل FFmpeg: ' + error.message);
             }
         }
 
@@ -2569,10 +2572,11 @@
 
                 updateFFmpegProgress('processing', 65, '⏳ جاري كتابة الإطارات إلى FFmpeg');
 
-                // كتابة الإطارات إلى FFmpeg
+                // كتابة الإطارات إلى FFmpeg (API 0.12.x)
+                const { fetchFile } = FFmpegUtil;
                 for (let i = 0; i < frames.length; i++) {
-                    const frameData = await ffmpeg.fetchFile(frames[i]);
-                    ffmpeg.FS('writeFile', `frame${String(i).padStart(6, '0')}.jpg`, frameData);
+                    const frameData = await fetchFile(frames[i]);
+                    await ffmpeg.writeFile(`frame${String(i).padStart(6, '0')}.jpg`, frameData);
 
                     if (i % 30 === 0) {
                         const progress = 65 + Math.floor((i / frames.length) * 10);
@@ -2587,9 +2591,9 @@
                 if (hasFullAudio && player.src) {
                     try {
                         const audioBlob = await fetch(player.src).then(r => r.blob());
-                        const audioData = await ffmpeg.fetchFile(audioBlob);
+                        const audioData = await fetchFile(audioBlob);
                         audioFileName = 'audio.mp3';
-                        ffmpeg.FS('writeFile', audioFileName, audioData);
+                        await ffmpeg.writeFile(audioFileName, audioData);
                     } catch (error) {
                         console.warn('تعذر تحميل الصوت:', error);
                     }
@@ -2620,12 +2624,12 @@
                     outputFileName
                 );
 
-                await ffmpeg.run(...ffmpegArgs);
+                await ffmpeg.exec(ffmpegArgs);
 
                 updateFFmpegProgress('downloading', 95, '⏳ جاري تحميل الفيديو');
 
                 // تحميل الفيديو
-                const data = ffmpeg.FS('readFile', outputFileName);
+                const data = await ffmpeg.readFile(outputFileName);
                 const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
                 const url = URL.createObjectURL(videoBlob);
 
@@ -2637,15 +2641,15 @@
                 updateFFmpegProgress('done', 100, '✅ تم التصدير بنجاح!');
 
                 // تنظيف الملفات
-                setTimeout(() => {
+                setTimeout(async () => {
                     try {
                         for (let i = 0; i < frames.length; i++) {
-                            ffmpeg.FS('unlink', `frame${String(i).padStart(6, '0')}.jpg`);
+                            await ffmpeg.deleteFile(`frame${String(i).padStart(6, '0')}.jpg`);
                         }
                         if (audioFileName) {
-                            ffmpeg.FS('unlink', audioFileName);
+                            await ffmpeg.deleteFile(audioFileName);
                         }
-                        ffmpeg.FS('unlink', outputFileName);
+                        await ffmpeg.deleteFile(outputFileName);
                     } catch (e) {
                         console.warn('تعذر تنظيف الملفات:', e);
                     }
