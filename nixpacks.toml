@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["ffmpeg", "nodejs"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "npm start"
