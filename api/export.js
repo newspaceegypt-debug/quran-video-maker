@@ -14,6 +14,20 @@ try {
   ffmpegPath = "";
 }
 
+function resolveFfmpegBin() {
+  return process.env.FFMPEG_BIN || ffmpegPath || "";
+}
+
+function canExecute(filePath) {
+  if (!filePath) return false;
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -87,6 +101,38 @@ async function safeUnlink(filePath) {
 module.exports = async (req, res) => {
   setCors(res);
 
+  if (req.method === "GET") {
+    const url = new URL(req.url, "http://localhost");
+    if (url.searchParams.get("debug") === "1") {
+      const ffmpegBin = resolveFfmpegBin();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(
+        JSON.stringify({
+          ok: true,
+          node: process.version,
+          tmp: os.tmpdir(),
+          formidable: {
+            type: typeof formidable,
+            fnType: typeof formidableFn,
+            hasIncomingForm: typeof IncomingForm === "function",
+          },
+          ffmpeg: {
+            env: process.env.FFMPEG_BIN || "",
+            path: ffmpegPath,
+            resolved: ffmpegBin,
+            exists: Boolean(ffmpegBin && fs.existsSync(ffmpegBin)),
+            executable: Boolean(ffmpegBin && canExecute(ffmpegBin)),
+          },
+        })
+      );
+      return;
+    }
+    res.statusCode = 405;
+    res.end("Method not allowed");
+    return;
+  }
+
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
@@ -125,7 +171,7 @@ module.exports = async (req, res) => {
 
     outputPath = path.join(os.tmpdir(), `quran-reel-${Date.now()}.mp4`);
 
-    const ffmpegBin = process.env.FFMPEG_BIN || ffmpegPath;
+    const ffmpegBin = resolveFfmpegBin();
     if (!ffmpegBin) {
       res.statusCode = 500;
       res.end("FFmpeg not available");
