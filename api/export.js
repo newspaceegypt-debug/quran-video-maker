@@ -4,6 +4,8 @@ const fsp = require("fs/promises");
 const os = require("os");
 const path = require("path");
 const formidable = require("formidable");
+const formidableFn = typeof formidable === "function" ? formidable : formidable.formidable;
+const IncomingForm = formidable.IncomingForm;
 
 let ffmpegPath = "";
 try {
@@ -20,12 +22,20 @@ function setCors(res) {
 
 function parseForm(req) {
   return new Promise((resolve, reject) => {
-    const form = formidable({
-      multiples: false,
-      keepExtensions: true,
-      uploadDir: os.tmpdir(),
-      maxFileSize: 1024 * 1024 * 1024,
-    });
+    const form =
+      typeof formidableFn === "function"
+        ? formidableFn({
+            multiples: false,
+            keepExtensions: true,
+            uploadDir: os.tmpdir(),
+            maxFileSize: 1024 * 1024 * 1024,
+          })
+        : new IncomingForm({
+            multiples: false,
+            keepExtensions: true,
+            uploadDir: os.tmpdir(),
+            maxFileSize: 1024 * 1024 * 1024,
+          });
     form.parse(req, (err, fields, files) => {
       if (err) {
         reject(err);
