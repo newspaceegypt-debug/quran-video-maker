@@ -169,7 +169,11 @@ module.exports = async (req, res) => {
   } catch (err) {
     await safeUnlink(inputPath);
     await safeUnlink(outputPath);
+    const message =
+      (err && (err.stack || err.message)) ||
+      (typeof err === "string" ? err : "FFmpeg failed");
+    console.error("FFmpeg failed:", message);
     res.statusCode = 500;
-    res.end("FFmpeg failed");
+    res.end(message);
   }
 };
