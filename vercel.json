@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/export.js": {
+      "maxDuration": 300,
+      "memory": 3008
+    }
+  }
+}

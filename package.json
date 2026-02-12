@@ -1,0 +1,11 @@
+{
+  "name": "quran-studio",
+  "private": true,
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "formidable": "^3.5.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
