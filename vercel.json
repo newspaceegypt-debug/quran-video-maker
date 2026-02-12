@@ -1,15 +1,9 @@
 {
-    "functions": {
-        "api/export.js": {
-            "maxDuration": 300,
-            "memory": 3008,
-            "includeFiles": "node_modules/@ffmpeg-installer/ffmpeg/**"
-        }
-    },
-    "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
-        }
-    ]
+  "functions": {
+    "api/export.js": {
+      "maxDuration": 300,
+      "memory": 3008,
+      "includeFiles": "node_modules/@ffmpeg-installer/ffmpeg/**"
+    }
+  }
 }
