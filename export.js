@@ -166,8 +166,10 @@ module.exports = async (req, res) => {
 
     const startValue = parseFloat(pickField(fields.start) || "0");
     const durationValue = parseFloat(pickField(fields.duration) || "0");
+    const fpsValue = parseFloat(pickField(fields.fps) || "30");
     const start = Number.isFinite(startValue) && startValue > 0 ? startValue : 0;
     const duration = Number.isFinite(durationValue) && durationValue > 0 ? durationValue : 0;
+    const fps = Number.isFinite(fpsValue) ? Math.min(60, Math.max(30, fpsValue)) : 30;
 
     outputPath = path.join(os.tmpdir(), `quran-reel-${Date.now()}.mp4`);
 
@@ -188,6 +190,10 @@ module.exports = async (req, res) => {
       "veryfast",
       "-crf",
       "23",
+      "-r",
+      String(fps),
+      "-vsync",
+      "cfr",
       "-pix_fmt",
       "yuv420p",
       "-c:a",
